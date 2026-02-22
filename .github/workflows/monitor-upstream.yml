@@ -27,7 +27,7 @@ jobs:
       UPSTREAM_REPO: "ClickHouse/clickhouse-connect"
       BRANCH: "main"
       RUNNER_DISPATCH_TIMEOUT: 7200 # 2 hours
-      MAX_CONCURRENT: 9
+      MAX_CONCURRENT: 2
 
     steps:
       # --------------------------------------------------------------------
@@ -44,10 +44,10 @@ jobs:
           echo "Historical mode: computing boundary SHA for ${NUMBER_OF_COMMITS} commits."
 
           # Clone the upstream repository
-          git clone "https://github.com/${UPSTREAM_REPO}.git" upstream-repo
+          git clone --depth=100000 "https://github.com/${UPSTREAM_REPO}.git" upstream-repo
           cd upstream-repo
           git checkout "${BRANCH}"
-          git log --no-merges --name-status | grep 'py\|^commit' | grep -B1 'py$' | grep ^commit | cut -d ' ' -f 2 > ../linear_commits.txt
+          git rev-list --first-parent "${BRANCH}" > ../linear_commits.txt
           cd ..
           rm -rf upstream-repo
 
@@ -80,10 +80,10 @@ jobs:
         run: |
           echo "Fetching upstream first-parent history..."
 
-          git clone "https://github.com/${UPSTREAM_REPO}.git" upstream-repo
+          git clone --depth=100000 "https://github.com/${UPSTREAM_REPO}.git" upstream-repo
           cd upstream-repo
           git checkout "${BRANCH}"
-          git log --no-merges --name-status | grep 'py\|^commit' | grep -B1 'py$' | grep ^commit | cut -d ' ' -f 2 > ../all_commits.txt
+          git rev-list --first-parent "${BRANCH}" > ../all_commits.txt
           cd ..
           rm -rf upstream-repo
 
@@ -164,6 +164,7 @@ jobs:
                 --repo "${GITHUB_REPOSITORY}" \
                 --ref "${BRANCH}" \
                 --field commit="$commit" \
+                --field dispatch_type="history" \
                 --field dispatch_id="$dispatch_id"
 
               dispatched_commits+=("$commit")
