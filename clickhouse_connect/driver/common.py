@@ -107,7 +107,7 @@ def unescape_identifier(x: str) -> str:
     return x
 
 
-def dict_copy(source: dict = None, update: dict | None = None) -> dict:
+def dict_copy(source: dict | None = None, update: dict | None = None) -> dict:
     copy = source.copy() if source else {}
     if update:
         copy.update(update)
