@@ -11,7 +11,7 @@ backend-specific code and never imports a backend package directly.
 The coupling surface between clickhouse-connect and an out-of-tree backend is therefore
 exactly two things:
 
-* the ``Backend`` protocol below (a small factory contract), and
+* the ``Backend`` (and optionally ``AsyncBackend``) protocols below, and
 * the entry-point group name ``clickhouse_connect.backends``.
 
 Everything else -- the engine version, its output formats, its private APIs -- is
@@ -28,6 +28,7 @@ Protocol evolution discipline (so a published backend never breaks):
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class Backend(Protocol):
-    """Factory contract that an out-of-tree backend package implements.
+    """Sync factory contract that an out-of-tree backend package implements.
 
     The object registered at the ``clickhouse_connect.backends`` entry point is loaded by
     :mod:`clickhouse_connect.driver.registry` and asked to build a client. It returns a
@@ -48,16 +49,23 @@ class Backend(Protocol):
     #: Stable identifier, must match the entry-point name (e.g. ``"chdb"``).
     backend_name: str
 
-    def create_client(self, **kwargs: Any) -> "Client":
+    def create_client(self, **kwargs: Any) -> Client:
         """Build and return a synchronous client for this backend."""
         ...
 
-    def create_async_client(self, **kwargs: Any) -> "Client":
-        """Build and return an async-capable client for this backend.
 
-        Optional: backends without async support may omit it. ``get_client``-style
-        resolution checks for the attribute before calling it.
-        """
+@runtime_checkable
+class AsyncBackend(Protocol):
+    """Optional async-factory protocol; backends that support async additionally implement this.
+
+    The async factory may either return a fully-initialized client (no awaiting needed) or
+    a coroutine producing one. ``get_async_client`` accepts both shapes.
+    """
+
+    backend_name: str
+
+    def create_async_client(self, **kwargs: Any) -> Client | Awaitable[Client]:
+        """Build and return an async-capable client (or a coroutine producing one)."""
         ...
 
 
@@ -77,6 +85,6 @@ class Backend(Protocol):
 SUPPORTS_ZERO_COPY_ARROW = "supports_zero_copy_arrow"
 
 
-def client_supports(client: "Client", capability: str) -> bool:
+def client_supports(client: Client, capability: str) -> bool:
     """Read a capability flag off a client, defaulting to ``False`` when absent."""
     return bool(getattr(client, capability, False))

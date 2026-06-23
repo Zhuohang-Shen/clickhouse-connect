@@ -13,7 +13,7 @@ from __future__ import annotations
 import importlib.metadata as _md
 from typing import TYPE_CHECKING
 
-from clickhouse_connect.driver.exceptions import BackendNotInstalled
+from clickhouse_connect.driver.exceptions import BackendNotInstalledError
 
 if TYPE_CHECKING:
     from clickhouse_connect.driver.backend import Backend
@@ -21,20 +21,15 @@ if TYPE_CHECKING:
 BACKENDS_GROUP = "clickhouse_connect.backends"
 
 # Install hints for backends maintained outside this repo. Adding an entry here is purely
-# a UX nicety for the BackendNotInstalled error; it creates no code dependency.
+# a UX nicety for the BackendNotInstalledError error; it creates no code dependency.
 _INSTALL_HINTS = {
     "chdb": "pip install clickhouse-connect[chdb]",
 }
 
 
 def _entry_points(group: str):
-    """Return entry points in a group, compatible across Python 3.9 - 3.12+."""
-    try:
-        # Python 3.10+: selectable API
-        return list(_md.entry_points(group=group))
-    except TypeError:
-        # Python 3.9: entry_points() returns a dict keyed by group
-        return list(_md.entry_points().get(group, []))
+    """Return entry points in a group (clickhouse-connect requires Python 3.10+)."""
+    return list(_md.entry_points(group=group))
 
 
 def available_backend_names() -> list[str]:
@@ -44,13 +39,13 @@ def available_backend_names() -> list[str]:
     return sorted(names)
 
 
-def resolve_backend(name: str) -> "Backend":
+def resolve_backend(name: str) -> Backend:
     """Load and return the registered backend factory for ``name``.
 
-    Raises :class:`BackendNotInstalled` (with an install hint when known) if no backend by
+    Raises :class:`BackendNotInstalledError` (with an install hint when known) if no backend by
     that name is registered.
     """
     for ep in _entry_points(BACKENDS_GROUP):
         if ep.name == name:
             return ep.load()
-    raise BackendNotInstalled(name, available=available_backend_names(), hint=_INSTALL_HINTS.get(name))
+    raise BackendNotInstalledError(name, available=available_backend_names(), hint=_INSTALL_HINTS.get(name))
