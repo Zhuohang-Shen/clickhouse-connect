@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, BinaryIO, cast
 
 import aiohttp
 import lz4.frame
-import zstandard
 
 if TYPE_CHECKING:
     import numpy
@@ -39,7 +38,7 @@ from clickhouse_connect.driver.asyncqueue import EOF_SENTINEL, AsyncSyncQueue
 from clickhouse_connect.driver.binding import bind_query, quote_identifier, use_form_encoding
 from clickhouse_connect.driver.client import Client, _apply_arrow_tz_policy
 from clickhouse_connect.driver.common import StreamContext, coerce_bool, dict_copy
-from clickhouse_connect.driver.compression import available_compression
+from clickhouse_connect.driver.compression import available_compression, zstd_decompress
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.ctypes import RespBuffCls
 from clickhouse_connect.driver.exceptions import (
@@ -88,8 +87,7 @@ def decompress_response(data: bytes, encoding: str | None) -> bytes:
         lz4_decom = lz4.frame.LZ4FrameDecompressor()
         return lz4_decom.decompress(data, len(data))
     if encoding == "zstd":
-        zstd_decom = zstandard.ZstdDecompressor()
-        return zstd_decom.stream_reader(io.BytesIO(data)).read()
+        return zstd_decompress(data)
     if encoding == "br":
         if brotli is not None:
             return brotli.decompress(data)

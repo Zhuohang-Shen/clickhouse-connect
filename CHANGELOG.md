@@ -5,6 +5,9 @@
 ### Bug Fixes
 - Dict-valued settings such as `additional_table_filters` no longer crash with `DB::Exception: Cannot parse quoted string` when passed through `query()`'s `settings` parameter. The value was rendered with Python's own `str()`/`repr()` of the dict, which mixes single and double quotes and is not valid ClickHouse map-literal syntax; it is now rendered as a properly single-quoted, escaped ClickHouse map literal. Closes [#501](https://github.com/ClickHouse/clickhouse-connect/issues/501).
 
+### Improvements
+- Replaced the `zstandard` dependency with the stdlib `compression.zstd` module (Python 3.14+) and `backports.zstd` (Python 3.10-3.13), which provides the same API as the stdlib module. This gives a single consistent call surface across all supported Python versions and removes a dependency that diverges from the standard library. Closes [#577](https://github.com/ClickHouse/clickhouse-connect/issues/577).
+
 ## 1.5.0, 2026-07-15
 
 ### Bug Fixes
