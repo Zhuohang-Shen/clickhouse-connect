@@ -17,21 +17,18 @@ else:
         print(f"Using Cython {cython_version} to build cython modules")
         c_modules = cythonize("clickhouse_connect/driverc/*.pyx", language_level="3str")
     except ImportError as ex:
-        print("Cython Install Failed, Not Building C Extensions: ", ex)
-        cythonize = None
+        raise RuntimeError(
+            "Cython is required to build the C extensions. Fix the build environment, "
+            "or set CLICKHOUSE_CONNECT_SKIP_CYTHON=1 to request a pure-Python build explicitly."
+        ) from ex
     except Exception as ex:
-        print("Cython Build Failed, Not Building C Extensions: ", ex)
-        cythonize = None
+        raise RuntimeError(
+            "Preparing the Cython extensions failed. Fix the build environment, "
+            "or set CLICKHOUSE_CONNECT_SKIP_CYTHON=1 to request a pure-Python build explicitly."
+        ) from ex
 
 
-def run_setup(try_c: bool = True):
-    if try_c:
-        kwargs = {
-            "ext_modules": c_modules,
-        }
-    else:
-        kwargs = {}
-
+def run_setup():
     project_dir = os.path.abspath(os.path.dirname(__file__))
     with open(os.path.join(project_dir, "README.md"), encoding="utf-8") as read_me:
         long_desc = read_me.read()
@@ -100,13 +97,8 @@ def run_setup(try_c: bool = True):
             "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: 3.14",
         ],
-        **kwargs,
+        ext_modules=c_modules,
     )
 
 
-try:
-    run_setup()
-
-except (OSError, Exception, SystemExit) as e:
-    print(f"Unable to compile C extensions for faster performance due to {e}, will use pure Python")
-    run_setup(False)
+run_setup()
