@@ -478,3 +478,50 @@ def test_remove_comments_no_space_after_dashes():
 )
 def test_remove_comments_separates_tokens(sql: str, expected: str):
     assert remove_sql_comments(sql) == expected
+
+
+@pytest.mark.parametrize(
+    "sql, expected",
+    [
+        ("SELECT 1 // LIMIT 5", "SELECT 1 "),
+        ("SELECT 1 # LIMIT 5", "SELECT 1 "),
+        ("SELECT 1 #! LIMIT 5", "SELECT 1 "),
+        (
+            "SELECT/* outer /* inner */ LIMIT 5 */1",
+            "SELECT 1",
+        ),
+    ],
+)
+def test_remove_comments_clickhouse_comment_syntax(sql: str, expected: str):
+    assert remove_sql_comments(sql) == expected
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT `a--b` LIMIT 1",
+        "SELECT $$--not comment$$ LIMIT 1",
+        "SELECT $tag$/* not comment */$tag$ LIMIT 1",
+        "SELECT 'a\\'b--not comment' LIMIT 1",
+        'SELECT "a\\"b--not comment" LIMIT 1',
+        "SELECT 'a''b--not comment' LIMIT 1",
+        "SELECT `a``--b` LIMIT 1",
+    ],
+)
+def test_remove_comments_preserves_quoted_tokens(sql: str):
+    assert remove_sql_comments(sql) == sql
+
+
+def test_remove_comments_bare_hash_is_not_comment():
+    sql = "SELECT #not_a_comment"
+    assert remove_sql_comments(sql) == sql
+
+
+def test_remove_comments_does_not_start_heredoc_inside_identifier():
+    sql = "SELECT b$c$ AS value, 1 -- comment\nSELECT 2"
+    assert remove_sql_comments(sql) == "SELECT b$c$ AS value, 1 \nSELECT 2"
+
+
+def test_remove_comments_preserves_unterminated_block_comment():
+    sql = "SELECT 1 /* unterminated"
+    assert remove_sql_comments(sql) == sql

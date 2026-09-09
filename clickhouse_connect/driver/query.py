@@ -447,32 +447,112 @@ class QueryResult(Closable):
             self._block_gen = None
 
 
-comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--)[^\n]*$)", re.MULTILINE | re.DOTALL)
-
-
 def remove_sql_comments(sql: str) -> str:
     """
-    Remove SQL comments.  This is useful to determine the type of SQL query, such as SELECT or INSERT, but we
-    don't fully trust it to correctly ignore weird quoted strings, and other edge cases, so we always pass the
-    original SQL to ClickHouse (which uses a full-fledged AST/ token parser)
+    Remove SQL comments while preserving quoted strings, identifiers, and heredocs.
 
-    A block comment is replaced with a single space because the server lexer treats it as a token separator,
-    so "SELECT/*c*/1" is two tokens for the server and has to stay two tokens here.  A line comment ends at
-    its newline, which is kept, so it separates the tokens around it on its own.
-    :param sql:  SQL query
-    :return: SQL Query without SQL comments
+    Block comments are replaced with a single space because the ClickHouse
+    lexer treats them as token separators. Newlines ending line comments are
+    preserved.
     """
+    result = []
+    length = len(sql)
+    i = 0
 
-    def replacer(match):
-        # if the 2nd group (capturing comments) is not None, it means we have captured a
-        # non-quoted, actual comment string, so replace it with its separator
-        if match.group(2):
-            # the 3rd group is only set for a line comment, whose terminating newline is not consumed
-            return "" if match.group(3) else " "
-        # Otherwise we've actually captured a quoted string, so return it
-        return match.group(1)
+    while i < length:
+        char = sql[i]
 
-    return comment_re.sub(replacer, sql)
+        # Quoted strings and identifiers.
+        if char in ("'", '"', "`"):
+            quote = char
+            start = i
+            i += 1
+
+            while i < length:
+                # Backslash-escaped character.
+                if sql[i] == "\\":
+                    i += 2
+                    continue
+
+                if sql[i] == quote:
+                    # Doubled quote, e.g. 'a''b', "a""b", `a``b`.
+                    if i + 1 < length and sql[i + 1] == quote:
+                        i += 2
+                        continue
+
+                    i += 1
+                    break
+
+                i += 1
+
+            result.append(sql[start:i])
+            continue
+
+        # Heredocs: $$...$$ or $tag$...$tag$.
+        if char == "$" and (i == 0 or not (sql[i - 1].isascii() and (sql[i - 1].isalnum() or sql[i - 1] in "_$"))):
+            tag_end = i + 1
+
+            while tag_end < length and (sql[tag_end].isascii() and (sql[tag_end].isalnum() or sql[tag_end] == "_")):
+                tag_end += 1
+
+            if tag_end < length and sql[tag_end] == "$":
+                delimiter = sql[i : tag_end + 1]
+                close = sql.find(delimiter, tag_end + 1)
+
+                if close != -1:
+                    end = close + len(delimiter)
+                    result.append(sql[i:end])
+                    i = end
+                    continue
+
+        # Line comments.
+        if sql.startswith("--", i) or sql.startswith("//", i):
+            i += 2
+
+            while i < length and sql[i] not in "\r\n":
+                i += 1
+
+            continue
+
+        # ClickHouse hash comments are "# " and "#!".
+        if char == "#" and i + 1 < length and sql[i + 1] in (" ", "!"):
+            i += 2
+
+            while i < length and sql[i] not in "\r\n":
+                i += 1
+
+            continue
+
+        # Nested block comments.
+        if sql.startswith("/*", i):
+            start = i
+            depth = 1
+            i += 2
+
+            while i < length and depth:
+                if sql.startswith("/*", i):
+                    depth += 1
+                    i += 2
+                    continue
+
+                if sql.startswith("*/", i):
+                    depth -= 1
+                    i += 2
+                    continue
+
+                i += 1
+
+            if depth:
+                result.append(sql[start:])
+                break
+
+            result.append(" ")
+            continue
+
+        result.append(char)
+        i += 1
+
+    return "".join(result)
 
 
 def to_arrow(content: bytes):
