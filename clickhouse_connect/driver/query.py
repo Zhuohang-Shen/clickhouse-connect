@@ -11,7 +11,9 @@ from clickhouse_connect.driver.binding import (
     _binding_has_binary_values,
     _binding_keeps_query_structure,
     _needs_trailing_semicolon_lexer,
+    _query_has_limit,
     _query_is_insert,
+    _query_is_select,
     _strip_trailing_semicolons,
     bind_query,
 )
@@ -170,11 +172,11 @@ class QueryContext(BaseQueryContext):
 
     @property
     def is_select(self) -> bool:
-        return select_re.search(self.uncommented_query) is not None
+        return _query_is_select(self.uncommented_query)
 
     @property
     def has_limit(self) -> bool:
-        return limit_re.search(self.uncommented_query) is not None
+        return _query_has_limit(self.uncommented_query)
 
     @property
     def is_insert(self) -> bool:

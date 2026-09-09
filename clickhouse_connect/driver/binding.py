@@ -101,6 +101,89 @@ def _skip_ascii_bareword(query: str, index: int) -> int:
     return index
 
 
+def _sql_tokens(query: str):
+    heredoc_ends = {match.group(1): match.start() for match in _heredoc_start_re.finditer(query)} if "$" in query else {}
+
+    index = 0
+    end = len(query)
+
+    while index < end:
+        token, token_end = _next_sql_token(query, index, heredoc_ends)
+        yield token, index, token_end
+
+        if token == _SQL_TOKEN_INVALID:
+            return
+
+        index = token_end
+
+
+def _query_has_limit(query: str) -> bool:
+    previous_was_trivia = False
+
+    for token, start, end in _sql_tokens(query):
+        if token == _SQL_TOKEN_INVALID:
+            return False
+
+        if token == _SQL_TOKEN_TRIVIA:
+            previous_was_trivia = True
+            continue
+
+        if token == _SQL_TOKEN_WORD and previous_was_trivia and query[start:end].upper() == "LIMIT":
+            return True
+
+        previous_was_trivia = False
+
+    return False
+
+
+def _query_is_select(query: str) -> bool:
+    previous_was_trivia = True
+
+    for token, start, end in _sql_tokens(query):
+        if token == _SQL_TOKEN_INVALID:
+            return False
+
+        if token == _SQL_TOKEN_TRIVIA:
+            previous_was_trivia = True
+            continue
+
+        if token == _SQL_TOKEN_WORD and previous_was_trivia and query[start:end].upper() == "SELECT":
+            return True
+
+        previous_was_trivia = False
+
+    return False
+
+
+def _query_has_trailing_limit_zero(query: str) -> bool:
+    significant = []
+
+    for token, start, end in _sql_tokens(query):
+        if token == _SQL_TOKEN_INVALID:
+            return False
+
+        if token == _SQL_TOKEN_TRIVIA:
+            continue
+
+        significant.append((token, start, end))
+
+    while significant and significant[-1][0] == _SQL_TOKEN_SEMICOLON:
+        significant.pop()
+
+    if len(significant) < 2:
+        return False
+
+    limit_token, limit_start, limit_end = significant[-2]
+    zero_token, zero_start, zero_end = significant[-1]
+
+    return (
+        limit_token == _SQL_TOKEN_WORD
+        and query[limit_start:limit_end].upper() == "LIMIT"
+        and zero_token == _SQL_TOKEN_OTHER
+        and query[zero_start:zero_end] == "0"
+    )
+
+
 def _next_sql_token(query: str, index: int, heredoc_ends: dict[str, int]) -> tuple[int, int]:
     """Return the next SQL token kind and its exclusive end offset."""
     end = len(query)

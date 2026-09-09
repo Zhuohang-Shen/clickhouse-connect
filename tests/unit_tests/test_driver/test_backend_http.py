@@ -204,6 +204,20 @@ class TestProbePlan:
         assert result.columns_only is True
         assert result.body == "SELECT * FROM t LIMIT 0 /* trailing */\n FORMAT JSON"
 
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT ' LIMIT 0 '",
+            "SELECT $$ LIMIT 0 $$",
+            "SELECT 1 LIMIT 0 SETTINGS max_threads = 1",
+            "SELECT 1 LIMIT 0 OFFSET 1",
+        ],
+    )
+    def test_probe_ignores_non_trailing_limit_zero(self, query):
+        context = self.probe_context(final_query=query, uncommented_query=query)
+        result = plan(context)
+        assert result.columns_only is False
+
     def test_probe_rejects_genuine_multi_statement_query(self):
         context = self.probe_context(uncommented_query="SELECT * FROM t LIMIT 0; SELECT 13")
         result = plan(context)

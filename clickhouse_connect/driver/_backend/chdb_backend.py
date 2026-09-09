@@ -34,9 +34,8 @@ from typing import TYPE_CHECKING, Any
 
 import chdb
 
-from clickhouse_connect.driver._backend.httpcommon import columns_only_re
 from clickhouse_connect.driver._backend.models import Capabilities, CommandExecution, QueryExecution, QueryRuntime
-from clickhouse_connect.driver.binding import quote_identifier
+from clickhouse_connect.driver.binding import _query_has_trailing_limit_zero, quote_identifier
 from clickhouse_connect.driver.common import ShowClickHouseErrors
 from clickhouse_connect.driver.exceptions import (
     GENERIC_CLICKHOUSE_ERROR,
@@ -588,7 +587,7 @@ class ChdbBackend:
         params = _strip_param_prefix(context.bind_params)
         settings = self._engine_settings(runtime.settings)
 
-        if not context.is_insert and columns_only_re.search(context.uncommented_query):
+        if not context.is_insert and _query_has_trailing_limit_zero(context.uncommented_query):
             # chdb emits zero Native bytes for LIMIT 0, so probe the column
             # metadata with FORMAT JSON like the HTTP backend does.
             probe_sql = context.final_query

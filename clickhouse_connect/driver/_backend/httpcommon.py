@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 from clickhouse_connect import common
 from clickhouse_connect.driver._backend.models import QueryRuntime
-from clickhouse_connect.driver.binding import quote_identifier, use_form_encoding
+from clickhouse_connect.driver.binding import _query_has_trailing_limit_zero, quote_identifier, use_form_encoding
 from clickhouse_connect.driver.common import ShowClickHouseErrors, coerce_bool, dict_copy
 from clickhouse_connect.driver.compression import _zstd_decompress, available_compression
 from clickhouse_connect.driver.exceptions import (
@@ -250,7 +250,7 @@ def plan_query_request(
     headers: dict[str, Any] = {}
     use_form = use_form_encoding(context.final_query, context.bind_params, form_encode_query_params)
 
-    if not context.is_insert and columns_only_re.search(context.uncommented_query):
+    if not context.is_insert and _query_has_trailing_limit_zero(context.uncommented_query):
         fmt_json_query = f"{context.final_query}\n FORMAT JSON"
         if use_form:
             form_values: dict[str, Any] = {"query": fmt_json_query}

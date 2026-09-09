@@ -88,6 +88,24 @@ def test_query_context_does_not_route_quoted_insert_literal_as_insert():
     assert context.final_query == "SELECT ' INSERT INTO ' -- trailing"
 
 
+@pytest.mark.parametrize(
+    "query, expected_is_select, expected_has_limit",
+    [
+        ("SELECT 1 LIMIT 1", True, True),
+        ("EXPLAIN ' SELECT '", False, False),
+        ("SELECT ' LIMIT '", True, False),
+        ("EXPLAIN $$ SELECT $$", False, False),
+        ("SELECT $$ LIMIT $$", True, False),
+        ("EXPLAIN 1 /* SELECT */", False, False),
+        ("SELECT 1 /* LIMIT 1 */", True, False),
+    ],
+)
+def test_query_context_classification_ignores_quoted_and_commented_keywords(query, expected_is_select, expected_has_limit):
+    context = QueryContext(query)
+    assert context.is_select is expected_is_select
+    assert context.has_limit is expected_has_limit
+
+
 def test_query_context_strips_command_terminators_for_streamed_entry_points():
     context = QueryContext("SHOW POLICIES; -- trailing")
     assert context.is_command is True
